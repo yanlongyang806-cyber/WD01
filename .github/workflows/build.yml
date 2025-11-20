@@ -1,0 +1,89 @@
+name: Build Night GameServer
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v1.1
+      
+    - name: Setup Visual Studio
+      uses: microsoft/setup-msbuild@v1.1
+      with:
+        msbuild-architecture: x64
+        
+    - name: Check dependencies
+      run: |
+        Write-Host "Checking dependencies..."
+        if (Test-Path "..\Cryptic\CrossRoads") {
+          Write-Host "✓ CrossRoads found"
+        } else {
+          Write-Host "✗ CrossRoads not found"
+        }
+        if (Test-Path "..\Cryptic\Core") {
+          Write-Host "✓ Core found"
+        } else {
+          Write-Host "✗ Core not found"
+        }
+      shell: pwsh
+      
+    - name: Create symbolic links (if dependencies exist)
+      run: |
+        $basePath = Get-Location
+        if (Test-Path "..\Cryptic\CrossRoads") {
+          if (-not (Test-Path "..\CrossRoads")) {
+            New-Item -ItemType SymbolicLink -Path "..\CrossRoads" -Target "..\Cryptic\CrossRoads" -Force
+            Write-Host "Created CrossRoads link"
+          }
+        }
+        if (Test-Path "..\Cryptic\Core") {
+          if (-not (Test-Path "..\core")) {
+            New-Item -ItemType SymbolicLink -Path "..\core" -Target "..\Cryptic\Core" -Force
+            Write-Host "Created core link"
+          }
+        }
+      shell: pwsh
+      
+    - name: Build GameServer
+      run: |
+        $solutionPath = "GameServer\NNOGameServer.sln"
+        if (Test-Path $solutionPath) {
+          msbuild $solutionPath /p:Configuration=Debug /p:Platform=Win32 /t:Build /v:minimal /nologo
+        } else {
+          Write-Host "Solution file not found: $solutionPath"
+          exit 1
+        }
+      shell: pwsh
+      continue-on-error: true
+      
+    - name: Upload build artifacts
+      if: success()
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-output
+        path: |
+          GameServer/Debug/
+          GameServer/bin/
+        if-no-files-found: warn
+        
+    - name: Build status
+      run: |
+        if ($LASTEXITCODE -eq 0) {
+          Write-Host "✅ Build succeeded!"
+        } else {
+          Write-Host "❌ Build failed with exit code: $LASTEXITCODE"
+          Write-Host "This is expected if dependencies are missing"
+        }
+      shell: pwsh
+

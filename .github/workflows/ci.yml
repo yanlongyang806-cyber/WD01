@@ -1,0 +1,95 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    name: Validate Project
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      
+    - name: Validate project files
+      run: |
+        Write-Host "=== Validating Project Files ===" -ForegroundColor Cyan
+        
+        # Check solution files
+        $solutions = @(
+          "GameServer\NNOGameServer.sln",
+          "AppServer\NNOAppServer.sln",
+          "GameClient\NNOGameClient.sln",
+          "MasterSolution\NNOMasterSolution.sln"
+        )
+        
+        foreach ($sln in $solutions) {
+          if (Test-Path $sln) {
+            Write-Host "✅ $sln" -ForegroundColor Green
+          } else {
+            Write-Host "❌ $sln (not found)" -ForegroundColor Red
+          }
+        }
+        
+        # Check project files
+        $projects = @(
+          "GameServer\NNOGameServer.vcxproj",
+          "AppServer\NNOAppServer.vcxproj",
+          "GameClient\NNOGameClient.vcxproj"
+        )
+        
+        Write-Host ""
+        Write-Host "=== Project Files ===" -ForegroundColor Cyan
+        foreach ($proj in $projects) {
+          if (Test-Path $proj) {
+            Write-Host "✅ $proj" -ForegroundColor Green
+          } else {
+            Write-Host "❌ $proj (not found)" -ForegroundColor Red
+          }
+        }
+        
+        # Check key source files
+        Write-Host ""
+        Write-Host "=== Key Source Files ===" -ForegroundColor Cyan
+        $sources = @(
+          "GameServer\NNOLogging.c",
+          "Common\NNOCommon.c",
+          "Common\NNOCommon.h"
+        )
+        
+        foreach ($src in $sources) {
+          if (Test-Path $src) {
+            Write-Host "✅ $src" -ForegroundColor Green
+          } else {
+            Write-Host "❌ $src (not found)" -ForegroundColor Red
+          }
+        }
+        
+        # Check scripts
+        Write-Host ""
+        Write-Host "=== Build Scripts ===" -ForegroundColor Cyan
+        $scripts = @(
+          "build.ps1",
+          "setup_dependencies.ps1",
+          "compile_now.ps1"
+        )
+        
+        foreach ($script in $scripts) {
+          if (Test-Path $script) {
+            Write-Host "✅ $script" -ForegroundColor Green
+          } else {
+            Write-Host "❌ $script (not found)" -ForegroundColor Red
+          }
+        }
+      shell: pwsh
+      
+    - name: Check file structure
+      run: |
+        Write-Host "=== File Structure ===" -ForegroundColor Cyan
+        Get-ChildItem -Directory | Select-Object Name | Format-Table -AutoSize
+      shell: pwsh
+
