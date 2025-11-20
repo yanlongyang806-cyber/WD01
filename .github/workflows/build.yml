@@ -301,17 +301,44 @@ jobs:
           $errorCount = 0
           $warningCount = 0
           
-          # Count errors
-          $errors = Select-String -Path $buildLog -Pattern "error\s+(CS|C\d{4}|LNK|MSB)" -CaseSensitive:$false
-          if ($errors) {
-            $errorCount = $errors.Count
-            Write-Host "❌ Found $errorCount error(s)" -ForegroundColor Red
-            Write-Host "`nFirst 15 errors:" -ForegroundColor Yellow
-            $errors | Select-Object -First 15 | ForEach-Object {
+          # Count errors - check for various error patterns
+          $errorPatterns = @(
+            "error\s+(CS|C\d{4}|LNK|MSB)",
+            "error MSB",
+            "error C",
+            "error LNK",
+            "fatal error",
+            "cannot open",
+            "unresolved external",
+            "not found"
+          )
+          
+          $allErrors = @()
+          foreach ($pattern in $errorPatterns) {
+            $matches = Select-String -Path $buildLog -Pattern $pattern -CaseSensitive:$false
+            if ($matches) {
+              $allErrors += $matches
+            }
+          }
+          
+          if ($allErrors) {
+            $errorCount = ($allErrors | Select-Object -Unique Line).Count
+            Write-Host "❌ Found $errorCount unique error(s)" -ForegroundColor Red
+            Write-Host "`nFirst 20 errors:" -ForegroundColor Yellow
+            $allErrors | Select-Object -First 20 -Unique Line | ForEach-Object {
               Write-Host "  $($_.Line.Trim())" -ForegroundColor Red
             }
           } else {
             Write-Host "✅ No compilation errors found in log" -ForegroundColor Green
+          }
+          
+          # Check if build actually compiled anything
+          $compiledFiles = Select-String -Path $buildLog -Pattern "Compiling|Linking|\.obj|\.exe" -CaseSensitive:$false
+          if (-not $compiledFiles) {
+            Write-Host "⚠️ WARNING: No compilation or linking activity found in log!" -ForegroundColor Yellow
+            Write-Host "  This suggests the build may have failed before compilation started." -ForegroundColor Yellow
+          } else {
+            Write-Host "✅ Build log shows compilation activity" -ForegroundColor Green
           }
           
           # Count warnings
