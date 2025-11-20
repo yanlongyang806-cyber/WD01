@@ -1,4 +1,4 @@
-name: CI
+name: CI - GameServer Only
 
 on:
   push:
@@ -9,87 +9,77 @@ on:
 jobs:
   validate:
     runs-on: windows-latest
-    name: Validate Project
+    name: Validate GameServer Project
     
     steps:
     - name: Checkout
       uses: actions/checkout@v4
       
-    - name: Validate project files
+    - name: Validate GameServer files
       run: |
-        Write-Host "=== Validating Project Files ===" -ForegroundColor Cyan
+        Write-Host "=== Validating GameServer Project ===" -ForegroundColor Cyan
         
-        # Check solution files
-        $solutions = @(
-          "GameServer\NNOGameServer.sln",
-          "AppServer\NNOAppServer.sln",
-          "GameClient\NNOGameClient.sln",
-          "MasterSolution\NNOMasterSolution.sln"
-        )
-        
-        foreach ($sln in $solutions) {
-          if (Test-Path $sln) {
-            Write-Host "✅ $sln" -ForegroundColor Green
-          } else {
-            Write-Host "❌ $sln (not found)" -ForegroundColor Red
-          }
+        # Check solution file
+        $solution = "GameServer\NNOGameServer.sln"
+        if (Test-Path $solution) {
+            Write-Host "OK: $solution" -ForegroundColor Green
+        } else {
+            Write-Host "ERROR: $solution (not found)" -ForegroundColor Red
+            exit 1
         }
         
-        # Check project files
-        $projects = @(
-          "GameServer\NNOGameServer.vcxproj",
-          "AppServer\NNOAppServer.vcxproj",
-          "GameClient\NNOGameClient.vcxproj"
-        )
-        
+        # Check project file
+        $project = "GameServer\NNOGameServer.vcxproj"
         Write-Host ""
-        Write-Host "=== Project Files ===" -ForegroundColor Cyan
-        foreach ($proj in $projects) {
-          if (Test-Path $proj) {
-            Write-Host "✅ $proj" -ForegroundColor Green
-          } else {
-            Write-Host "❌ $proj (not found)" -ForegroundColor Red
-          }
+        Write-Host "=== Project File ===" -ForegroundColor Cyan
+        if (Test-Path $project) {
+            Write-Host "OK: $project" -ForegroundColor Green
+        } else {
+            Write-Host "ERROR: $project (not found)" -ForegroundColor Red
+            exit 1
         }
         
         # Check key source files
         Write-Host ""
         Write-Host "=== Key Source Files ===" -ForegroundColor Cyan
         $sources = @(
-          "GameServer\NNOLogging.c",
-          "Common\NNOCommon.c",
-          "Common\NNOCommon.h"
+            "GameServer\NNOLogging.c",
+            "Common\NNOCommon.c",
+            "Common\NNOCommon.h"
         )
         
         foreach ($src in $sources) {
-          if (Test-Path $src) {
-            Write-Host "✅ $src" -ForegroundColor Green
-          } else {
-            Write-Host "❌ $src (not found)" -ForegroundColor Red
-          }
+            if (Test-Path $src) {
+                Write-Host "OK: $src" -ForegroundColor Green
+            } else {
+                Write-Host "WARNING: $src (not found)" -ForegroundColor Yellow
+            }
         }
         
-        # Check scripts
+        # Check build scripts
         Write-Host ""
         Write-Host "=== Build Scripts ===" -ForegroundColor Cyan
         $scripts = @(
-          "build.ps1",
-          "setup_dependencies.ps1",
-          "compile_now.ps1"
+            "build.ps1",
+            "setup_dependencies.ps1"
         )
         
         foreach ($script in $scripts) {
-          if (Test-Path $script) {
-            Write-Host "✅ $script" -ForegroundColor Green
-          } else {
-            Write-Host "❌ $script (not found)" -ForegroundColor Red
-          }
+            if (Test-Path $script) {
+                Write-Host "OK: $script" -ForegroundColor Green
+            } else {
+                Write-Host "WARNING: $script (not found)" -ForegroundColor Yellow
+            }
         }
       shell: pwsh
       
     - name: Check file structure
       run: |
-        Write-Host "=== File Structure ===" -ForegroundColor Cyan
-        Get-ChildItem -Directory | Select-Object Name | Format-Table -AutoSize
+        Write-Host "=== GameServer Directory Structure ===" -ForegroundColor Cyan
+        if (Test-Path "GameServer") {
+            Get-ChildItem "GameServer" -Directory | Select-Object Name | Format-Table -AutoSize
+        } else {
+            Write-Host "ERROR: GameServer directory not found" -ForegroundColor Red
+            exit 1
+        }
       shell: pwsh
-
