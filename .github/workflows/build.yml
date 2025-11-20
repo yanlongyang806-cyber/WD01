@@ -192,41 +192,35 @@ jobs:
       shell: pwsh
       continue-on-error: true
       
-    - name: Validate solution file
+    - name: Validate project file
       run: |
-        Write-Host "=== Validating Solution File ===" -ForegroundColor Cyan
-        $solutionPath = "GameServer\NNOGameServer.sln"
+        Write-Host "=== Validating Project File ===" -ForegroundColor Cyan
+        $projectPath = "GameServer\NNOGameServer.vcxproj"
         
-        if (-not (Test-Path $solutionPath)) {
-          Write-Host "❌ Solution file not found: $solutionPath" -ForegroundColor Red
-          Write-Host "Available solution files:" -ForegroundColor Yellow
-          Get-ChildItem -Recurse -Filter "*.sln" -ErrorAction SilentlyContinue | 
+        if (-not (Test-Path $projectPath)) {
+          Write-Host "❌ Project file not found: $projectPath" -ForegroundColor Red
+          Write-Host "Available project files:" -ForegroundColor Yellow
+          Get-ChildItem -Recurse -Filter "*.vcxproj" -ErrorAction SilentlyContinue | 
             Select-Object FullName | 
             ForEach-Object { Write-Host "  $($_.FullName)" -ForegroundColor Gray }
           exit 1
         }
         
-        Write-Host "✅ Solution file found: $solutionPath" -ForegroundColor Green
-        
-        # Check if solution file is valid
-        $content = Get-Content $solutionPath -Raw
-        if ($content -match "Microsoft Visual Studio Solution") {
-          Write-Host "✅ Solution file format is valid" -ForegroundColor Green
-        } else {
-          Write-Host "⚠️ Solution file format may be invalid" -ForegroundColor Yellow
-        }
+        Write-Host "✅ Project file found: $projectPath" -ForegroundColor Green
       shell: pwsh
       
     - name: Build GameServer
       id: build
       run: |
         Write-Host "=== Building GameServer ===" -ForegroundColor Cyan
-        $solutionPath = "GameServer\NNOGameServer.sln"
+        $projectPath = "GameServer\NNOGameServer.vcxproj"
         $buildLog = "build.log"
         
-        Write-Host "Solution: $solutionPath" -ForegroundColor Gray
+        Write-Host "Project: $projectPath" -ForegroundColor Gray
         Write-Host "Configuration: $env:BUILD_CONFIGURATION" -ForegroundColor Gray
         Write-Host "Platform: $env:BUILD_PLATFORM" -ForegroundColor Gray
+        Write-Host ""
+        Write-Host "Note: Building project directly instead of solution to avoid path issues" -ForegroundColor Yellow
         Write-Host ""
         
         # Check dependencies before building
@@ -241,7 +235,7 @@ jobs:
         # Build with detailed logging
         $buildOutput = ""
         try {
-          msbuild $solutionPath `
+          msbuild $projectPath `
             /p:Configuration=$env:BUILD_CONFIGURATION `
             /p:Platform=$env:BUILD_PLATFORM `
             /t:Build `
