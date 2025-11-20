@@ -333,37 +333,75 @@ jobs:
           Write-Host "⚠️ Build log file not found" -ForegroundColor Yellow
         }
         
-        # Check for output files
+        # Check for output files - search more thoroughly
         Write-Host "`n=== Checking for Build Outputs ===" -ForegroundColor Cyan
-        $outputDirs = @(
+        
+        # Search for all possible output locations
+        $searchPaths = @(
           "GameServer\Debug",
+          "GameServer\Release",
           "GameServer\bin",
           "GameServer\x64\Debug",
+          "GameServer\x64\Release",
           "GameServer\Win32\Debug",
-          "GameServer\Debug\GameServer.exe",
-          "GameServer\bin\GameServer.exe"
+          "GameServer\Win32\Release",
+          "Debug",
+          "Release",
+          "bin"
         )
         
+        Write-Host "Searching for output files in:" -ForegroundColor Gray
+        $searchPaths | ForEach-Object { Write-Host "  - $_" -ForegroundColor Gray }
+        Write-Host ""
+        
         $foundOutputs = $false
-        foreach ($dir in $outputDirs) {
-          if (Test-Path $dir) {
-            if ((Get-Item $dir) -is [System.IO.DirectoryInfo]) {
-              $files = Get-ChildItem $dir -Recurse -File -ErrorAction SilentlyContinue
+        $allFoundFiles = @()
+        
+        foreach ($searchPath in $searchPaths) {
+          if (Test-Path $searchPath) {
+            $item = Get-Item $searchPath
+            if ($item -is [System.IO.DirectoryInfo]) {
+              $files = Get-ChildItem $searchPath -Recurse -File -ErrorAction SilentlyContinue
               if ($files) {
-                Write-Host "✅ Found output directory: $dir ($($files.Count) files)" -ForegroundColor Green
-                $files | Select-Object -First 5 Name, Length | Format-Table -AutoSize
-                $foundOutputs = $true
+                Write-Host "✅ Found output directory: $searchPath ($($files.Count) files)" -ForegroundColor Green
+                $exeFiles = $files | Where-Object { $_.Extension -match '\.(exe|dll|lib|obj)$' }
+                if ($exeFiles) {
+                  Write-Host "  Executable/Library files:" -ForegroundColor Cyan
+                  $exeFiles | Select-Object -First 10 Name, @{Name="Size(KB)";Expression={[math]::Round($_.Length/1KB,2)}} | Format-Table -AutoSize
+                  $allFoundFiles += $exeFiles
+                  $foundOutputs = $true
+                }
               }
-            } else {
-              Write-Host "✅ Found output file: $dir" -ForegroundColor Green
+            } elseif ($item -is [System.IO.FileInfo]) {
+              Write-Host "✅ Found output file: $searchPath" -ForegroundColor Green
+              $allFoundFiles += $item
               $foundOutputs = $true
             }
+          }
+        }
+        
+        # Also search for .exe files directly
+        if (-not $foundOutputs) {
+          Write-Host "Searching for .exe files in GameServer directory..." -ForegroundColor Yellow
+          $exeFiles = Get-ChildItem "GameServer" -Recurse -Filter "*.exe" -ErrorAction SilentlyContinue
+          if ($exeFiles) {
+            Write-Host "✅ Found .exe files:" -ForegroundColor Green
+            $exeFiles | Select-Object FullName, @{Name="Size(KB)";Expression={[math]::Round($_.Length/1KB,2)}} | Format-Table -AutoSize
+            $foundOutputs = $true
+            $allFoundFiles += $exeFiles
           }
         }
         
         if (-not $foundOutputs) {
           Write-Host "❌ No build output files found!" -ForegroundColor Red
           Write-Host "This indicates the build did not produce any executables." -ForegroundColor Yellow
+          Write-Host "`nPossible reasons:" -ForegroundColor Yellow
+          Write-Host "  1. Build failed but exit code was 0 (check build.log)" -ForegroundColor Gray
+          Write-Host "  2. Missing dependencies (libs, CrossRoads) prevented compilation" -ForegroundColor Gray
+          Write-Host "  3. Output directory is in a different location" -ForegroundColor Gray
+          Write-Host "  4. Project configuration issue" -ForegroundColor Gray
+        } else {
+          Write-Host "`n✅ Total output files found: $($allFoundFiles.Count)" -ForegroundColor Green
         }
         
         echo "exit_code=$buildExitCode" >> $env:GITHUB_OUTPUT
