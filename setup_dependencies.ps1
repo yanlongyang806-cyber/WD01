@@ -54,6 +54,12 @@ $libsPath = Join-Path $basePath "libs"
 if (-not (Test-Path $libsPath)) {
     Write-Host "WARNING: libs directory not found at: $libsPath" -ForegroundColor Yellow
     Write-Host "  You may need to create this directory or find where libraries are located" -ForegroundColor Yellow
+    
+    # Try to find libs in Cryptic directory
+    $crypticLibs = Get-ChildItem "I:\wd1\Cryptic" -Recurse -Directory -Filter "*lib*" -ErrorAction SilentlyContinue -Depth 2 | Select-Object -First 1
+    if ($crypticLibs) {
+        Write-Host "  Found potential libs location: $($crypticLibs.FullName)" -ForegroundColor Cyan
+    }
 }
 
 # Check for PropertySheets directory
@@ -61,6 +67,12 @@ $propsPath = Join-Path $basePath "PropertySheets"
 if (-not (Test-Path $propsPath)) {
     Write-Host "WARNING: PropertySheets directory not found at: $propsPath" -ForegroundColor Yellow
     Write-Host "  You may need to create this directory or find where property sheets are located" -ForegroundColor Yellow
+    
+    # Try to find .props files
+    $propsFiles = Get-ChildItem "I:\wd1\Cryptic" -Recurse -Filter "*.props" -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($propsFiles) {
+        Write-Host "  Found .props file at: $($propsFiles.DirectoryName)" -ForegroundColor Cyan
+    }
 }
 
 # Check for utilities directory
@@ -68,6 +80,12 @@ $utilsPath = Join-Path $basePath "utilities"
 if (-not (Test-Path $utilsPath)) {
     Write-Host "WARNING: utilities directory not found at: $utilsPath" -ForegroundColor Yellow
     Write-Host "  This contains structparser.exe needed for pre-build" -ForegroundColor Yellow
+    
+    # Try to find structparser
+    $structparser = Get-ChildItem "I:\wd1" -Recurse -Filter "structparser.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($structparser) {
+        Write-Host "  Found structparser.exe at: $($structparser.DirectoryName)" -ForegroundColor Cyan
+    }
 }
 
 Write-Host ""
