@@ -1,0 +1,91 @@
+name: Prepare Dependencies for Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      include_cryptic:
+        description: 'Include Cryptic dependencies'
+        required: false
+        default: 'false'
+        type: boolean
+
+jobs:
+  prepare:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Check for Cryptic directory
+      run: |
+        Write-Host "=== Checking for Cryptic Dependencies ===" -ForegroundColor Cyan
+        
+        $crypticPaths = @(
+          "..\Cryptic",
+          "Cryptic",
+          "..\..\Cryptic"
+        )
+        
+        $foundCryptic = $false
+        foreach ($path in $crypticPaths) {
+          if (Test-Path $path) {
+            Write-Host "✅ Found Cryptic at: $path" -ForegroundColor Green
+            $foundCryptic = $true
+            
+            # List contents
+            Write-Host "`nCryptic directory contents:" -ForegroundColor Cyan
+            Get-ChildItem $path -Directory -ErrorAction SilentlyContinue | 
+              Select-Object Name | 
+              Format-Table -AutoSize
+            break
+          }
+        }
+        
+        if (-not $foundCryptic) {
+          Write-Host "❌ Cryptic directory not found" -ForegroundColor Red
+          Write-Host "`nTo enable full build, you need to:" -ForegroundColor Yellow
+          Write-Host "  1. Add Cryptic directory to the repository" -ForegroundColor Gray
+          Write-Host "  2. Or use Git LFS for large files" -ForegroundColor Gray
+          Write-Host "  3. Or configure self-hosted runner" -ForegroundColor Gray
+        }
+        
+        echo "found_cryptic=$foundCryptic" >> $env:GITHUB_OUTPUT
+      shell: pwsh
+      
+    - name: Create dependency structure
+      if: steps.check.outputs.found_cryptic == 'true'
+      run: |
+        Write-Host "=== Creating Dependency Structure ===" -ForegroundColor Cyan
+        
+        # Create links or copy structure
+        $basePath = Get-Location
+        
+        # CrossRoads
+        if (Test-Path "..\Cryptic\CrossRoads") {
+          if (-not (Test-Path "..\CrossRoads")) {
+            try {
+              New-Item -ItemType SymbolicLink -Path "..\CrossRoads" -Target "..\Cryptic\CrossRoads" -Force | Out-Null
+              Write-Host "✅ Created CrossRoads link" -ForegroundColor Green
+            } catch {
+              Write-Host "⚠️ Using copy instead of link" -ForegroundColor Yellow
+              Copy-Item -Path "..\Cryptic\CrossRoads" -Destination "..\CrossRoads" -Recurse -Force
+            }
+          }
+        }
+        
+        # Core
+        if (Test-Path "..\Cryptic\Core") {
+          if (-not (Test-Path "..\core")) {
+            try {
+              New-Item -ItemType SymbolicLink -Path "..\core" -Target "..\Cryptic\Core" -Force | Out-Null
+              Write-Host "✅ Created core link" -ForegroundColor Green
+            } catch {
+              Write-Host "⚠️ Using copy instead of link" -ForegroundColor Yellow
+              Copy-Item -Path "..\Cryptic\Core" -Destination "..\core" -Recurse -Force
+            }
+          }
+        }
+      shell: pwsh
+      continue-on-error: true
+

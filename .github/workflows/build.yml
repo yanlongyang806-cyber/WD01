@@ -7,83 +7,321 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
 
+env:
+  BUILD_CONFIGURATION: Debug
+  BUILD_PLATFORM: Win32
+
 jobs:
   build:
     runs-on: windows-latest
+    timeout-minutes: 30
     
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      
+      with:
+        fetch-depth: 0
+        
     - name: Setup MSBuild
       uses: microsoft/setup-msbuild@v1.1
       
-    - name: Setup Visual Studio
-      uses: microsoft/setup-msbuild@v1.1
-      with:
-        msbuild-architecture: x64
-        
-    - name: Check dependencies
+    - name: Display environment
       run: |
-        Write-Host "Checking dependencies..."
-        if (Test-Path "..\Cryptic\CrossRoads") {
-          Write-Host "✓ CrossRoads found"
-        } else {
-          Write-Host "✗ CrossRoads not found"
-        }
-        if (Test-Path "..\Cryptic\Core") {
-          Write-Host "✓ Core found"
-        } else {
-          Write-Host "✗ Core not found"
-        }
+        Write-Host "=== Build Environment ===" -ForegroundColor Cyan
+        Write-Host "Runner OS: $env:RUNNER_OS" -ForegroundColor Gray
+        Write-Host "Workspace: $env:GITHUB_WORKSPACE" -ForegroundColor Gray
+        Write-Host "Build Configuration: $env:BUILD_CONFIGURATION" -ForegroundColor Gray
+        Write-Host "Build Platform: $env:BUILD_PLATFORM" -ForegroundColor Gray
       shell: pwsh
       
-    - name: Create symbolic links (if dependencies exist)
+    - name: Check project structure
       run: |
+        Write-Host "=== Project Structure ===" -ForegroundColor Cyan
+        Get-Location
+        Get-ChildItem -Directory | Select-Object Name | Format-Table -AutoSize
+        
+        Write-Host "`n=== Solution Files ===" -ForegroundColor Cyan
+        Get-ChildItem -Recurse -Filter "*.sln" -ErrorAction SilentlyContinue | 
+          Select-Object FullName | 
+          ForEach-Object { Write-Host "  $($_.FullName)" -ForegroundColor Gray }
+      shell: pwsh
+      
+    - name: Check dependencies
+      id: check-deps
+      run: |
+        Write-Host "=== Dependency Check ===" -ForegroundColor Cyan
+        $deps = @{}
+        
+        # Check for CrossRoads
+        $crossRoadsPaths = @(
+          "..\Cryptic\CrossRoads",
+          "..\CrossRoads",
+          "Cryptic\CrossRoads",
+          "CrossRoads"
+        )
+        foreach ($path in $crossRoadsPaths) {
+          if (Test-Path $path) {
+            $deps["CrossRoads"] = $path
+            Write-Host "✅ CrossRoads found at: $path" -ForegroundColor Green
+            break
+          }
+        }
+        if (-not $deps["CrossRoads"]) {
+          Write-Host "❌ CrossRoads not found" -ForegroundColor Red
+        }
+        
+        # Check for Core
+        $corePaths = @(
+          "..\Cryptic\Core",
+          "..\core",
+          "Cryptic\Core",
+          "core"
+        )
+        foreach ($path in $corePaths) {
+          if (Test-Path $path) {
+            $deps["Core"] = $path
+            Write-Host "✅ Core found at: $path" -ForegroundColor Green
+            break
+          }
+        }
+        if (-not $deps["Core"]) {
+          Write-Host "❌ Core not found" -ForegroundColor Red
+        }
+        
+        # Check for libs
+        $libsPaths = @(
+          "..\libs",
+          "libs"
+        )
+        foreach ($path in $libsPaths) {
+          if (Test-Path $path) {
+            $deps["libs"] = $path
+            Write-Host "✅ libs found at: $path" -ForegroundColor Green
+            break
+          }
+        }
+        if (-not $deps["libs"]) {
+          Write-Host "⚠️ libs not found (may be optional)" -ForegroundColor Yellow
+        }
+        
+        # Check for PropertySheets
+        $propsPaths = @(
+          "..\PropertySheets",
+          "PropertySheets"
+        )
+        foreach ($path in $propsPaths) {
+          if (Test-Path $path) {
+            $deps["PropertySheets"] = $path
+            Write-Host "✅ PropertySheets found at: $path" -ForegroundColor Green
+            break
+          }
+        }
+        if (-not $deps["PropertySheets"]) {
+          Write-Host "⚠️ PropertySheets not found (may cause build errors)" -ForegroundColor Yellow
+        }
+        
+        # Check for structparser
+        $structparserPaths = @(
+          "..\utilities\bin\structparser.exe",
+          "utilities\bin\structparser.exe",
+          "..\..\utilities\bin\structparser.exe"
+        )
+        foreach ($path in $structparserPaths) {
+          if (Test-Path $path) {
+            $deps["structparser"] = $path
+            Write-Host "✅ structparser.exe found at: $path" -ForegroundColor Green
+            break
+          }
+        }
+        if (-not $deps["structparser"]) {
+          Write-Host "⚠️ structparser.exe not found (pre-build step may fail)" -ForegroundColor Yellow
+        }
+        
+        # Output for next steps
+        $hasRequired = ($deps["CrossRoads"] -and $deps["Core"])
+        Write-Host "`nRequired dependencies available: $hasRequired" -ForegroundColor $(if ($hasRequired) { "Green" } else { "Red" })
+        echo "has_required=$hasRequired" >> $env:GITHUB_OUTPUT
+      shell: pwsh
+      continue-on-error: true
+      
+    - name: Create dependency links
+      if: steps.check-deps.outputs.has_required == 'false'
+      run: |
+        Write-Host "=== Attempting to create dependency links ===" -ForegroundColor Cyan
+        
+        # Try to create links if dependencies exist in different locations
         $basePath = Get-Location
+        
+        # CrossRoads
         if (Test-Path "..\Cryptic\CrossRoads") {
           if (-not (Test-Path "..\CrossRoads")) {
-            New-Item -ItemType SymbolicLink -Path "..\CrossRoads" -Target "..\Cryptic\CrossRoads" -Force
-            Write-Host "Created CrossRoads link"
+            try {
+              New-Item -ItemType SymbolicLink -Path "..\CrossRoads" -Target "..\Cryptic\CrossRoads" -Force | Out-Null
+              Write-Host "✅ Created CrossRoads link" -ForegroundColor Green
+            } catch {
+              Write-Host "⚠️ Could not create CrossRoads link: $_" -ForegroundColor Yellow
+            }
           }
         }
+        
+        # Core
         if (Test-Path "..\Cryptic\Core") {
           if (-not (Test-Path "..\core")) {
-            New-Item -ItemType SymbolicLink -Path "..\core" -Target "..\Cryptic\Core" -Force
-            Write-Host "Created core link"
+            try {
+              New-Item -ItemType SymbolicLink -Path "..\core" -Target "..\Cryptic\Core" -Force | Out-Null
+              Write-Host "✅ Created core link" -ForegroundColor Green
+            } catch {
+              Write-Host "⚠️ Could not create core link: $_" -ForegroundColor Yellow
+            }
           }
-        }
-      shell: pwsh
-      
-    - name: Build GameServer
-      run: |
-        $solutionPath = "GameServer\NNOGameServer.sln"
-        if (Test-Path $solutionPath) {
-          msbuild $solutionPath /p:Configuration=Debug /p:Platform=Win32 /t:Build /v:minimal /nologo
-        } else {
-          Write-Host "Solution file not found: $solutionPath"
-          exit 1
         }
       shell: pwsh
       continue-on-error: true
       
+    - name: Validate solution file
+      run: |
+        Write-Host "=== Validating Solution File ===" -ForegroundColor Cyan
+        $solutionPath = "GameServer\NNOGameServer.sln"
+        
+        if (-not (Test-Path $solutionPath)) {
+          Write-Host "❌ Solution file not found: $solutionPath" -ForegroundColor Red
+          Write-Host "Available solution files:" -ForegroundColor Yellow
+          Get-ChildItem -Recurse -Filter "*.sln" -ErrorAction SilentlyContinue | 
+            Select-Object FullName | 
+            ForEach-Object { Write-Host "  $($_.FullName)" -ForegroundColor Gray }
+          exit 1
+        }
+        
+        Write-Host "✅ Solution file found: $solutionPath" -ForegroundColor Green
+        
+        # Check if solution file is valid
+        $content = Get-Content $solutionPath -Raw
+        if ($content -match "Microsoft Visual Studio Solution") {
+          Write-Host "✅ Solution file format is valid" -ForegroundColor Green
+        } else {
+          Write-Host "⚠️ Solution file format may be invalid" -ForegroundColor Yellow
+        }
+      shell: pwsh
+      
+    - name: Build GameServer
+      id: build
+      run: |
+        Write-Host "=== Building GameServer ===" -ForegroundColor Cyan
+        $solutionPath = "GameServer\NNOGameServer.sln"
+        $buildLog = "build.log"
+        
+        Write-Host "Solution: $solutionPath" -ForegroundColor Gray
+        Write-Host "Configuration: $env:BUILD_CONFIGURATION" -ForegroundColor Gray
+        Write-Host "Platform: $env:BUILD_PLATFORM" -ForegroundColor Gray
+        Write-Host ""
+        
+        # Build with detailed logging
+        msbuild $solutionPath `
+          /p:Configuration=$env:BUILD_CONFIGURATION `
+          /p:Platform=$env:BUILD_PLATFORM `
+          /t:Build `
+          /v:detailed `
+          /nologo `
+          /fl `
+          /flp:logfile=$buildLog;verbosity=detailed `
+          2>&1 | Tee-Object -Variable buildOutput
+        
+        $buildExitCode = $LASTEXITCODE
+        
+        # Analyze build output
+        Write-Host "`n=== Build Analysis ===" -ForegroundColor Cyan
+        
+        if (Test-Path $buildLog) {
+          $errors = Select-String -Path $buildLog -Pattern "error\s+(CS|C\d{4}|LNK)" -CaseSensitive:$false
+          $warnings = Select-String -Path $buildLog -Pattern "warning" -CaseSensitive:$false
+          
+          if ($errors) {
+            Write-Host "❌ Found $($errors.Count) error(s)" -ForegroundColor Red
+            $errors | Select-Object -First 10 | ForEach-Object {
+              Write-Host "  $($_.Line)" -ForegroundColor Red
+            }
+          } else {
+            Write-Host "✅ No compilation errors found" -ForegroundColor Green
+          }
+          
+          if ($warnings) {
+            Write-Host "⚠️ Found $($warnings.Count) warning(s)" -ForegroundColor Yellow
+          }
+        }
+        
+        echo "exit_code=$buildExitCode" >> $env:GITHUB_OUTPUT
+        exit $buildExitCode
+      shell: pwsh
+      continue-on-error: true
+      
+    - name: Find build outputs
+      if: always()
+      run: |
+        Write-Host "=== Searching for Build Outputs ===" -ForegroundColor Cyan
+        
+        $outputDirs = @(
+          "GameServer\Debug",
+          "GameServer\bin",
+          "GameServer\x64\Debug",
+          "GameServer\Win32\Debug"
+        )
+        
+        $foundOutputs = $false
+        foreach ($dir in $outputDirs) {
+          if (Test-Path $dir) {
+            Write-Host "✅ Found output directory: $dir" -ForegroundColor Green
+            Get-ChildItem $dir -Recurse -File -ErrorAction SilentlyContinue | 
+              Select-Object -First 10 Name, Length | 
+              Format-Table -AutoSize
+            $foundOutputs = $true
+          }
+        }
+        
+        if (-not $foundOutputs) {
+          Write-Host "⚠️ No build output directories found" -ForegroundColor Yellow
+        }
+      shell: pwsh
+      
     - name: Upload build artifacts
-      if: success()
+      if: steps.build.outputs.exit_code == '0'
       uses: actions/upload-artifact@v4
       with:
-        name: build-output
+        name: build-outputs
         path: |
           GameServer/Debug/
           GameServer/bin/
+          GameServer/x64/Debug/
+          GameServer/Win32/Debug/
         if-no-files-found: warn
+        retention-days: 7
         
-    - name: Build status
+    - name: Upload build log
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: build-log
+        path: build.log
+        if-no-files-found: ignore
+        retention-days: 30
+        
+    - name: Build summary
+      if: always()
       run: |
-        if ($LASTEXITCODE -eq 0) {
-          Write-Host "✅ Build succeeded!"
+        Write-Host "`n=== Build Summary ===" -ForegroundColor Cyan
+        Write-Host "Exit Code: $env:BUILD_EXIT_CODE" -ForegroundColor $(if ($env:BUILD_EXIT_CODE -eq "0") { "Green" } else { "Red" })
+        
+        if ($env:BUILD_EXIT_CODE -eq "0") {
+          Write-Host "✅ Build completed successfully!" -ForegroundColor Green
+          Write-Host "Check artifacts for build outputs." -ForegroundColor Gray
         } else {
-          Write-Host "❌ Build failed with exit code: $LASTEXITCODE"
-          Write-Host "This is expected if dependencies are missing"
+          Write-Host "❌ Build failed" -ForegroundColor Red
+          Write-Host "`nCommon reasons for build failure:" -ForegroundColor Yellow
+          Write-Host "  1. Missing dependencies (CrossRoads, Core, libs)" -ForegroundColor Gray
+          Write-Host "  2. Missing PropertySheets configuration files" -ForegroundColor Gray
+          Write-Host "  3. Missing structparser.exe pre-build tool" -ForegroundColor Gray
+          Write-Host "  4. Missing required header files or libraries" -ForegroundColor Gray
+          Write-Host "`nCheck build.log artifact for detailed error information." -ForegroundColor Cyan
         }
       shell: pwsh
-
+      env:
+        BUILD_EXIT_CODE: ${{ steps.build.outputs.exit_code }}

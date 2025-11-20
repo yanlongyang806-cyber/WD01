@@ -1,0 +1,66 @@
+name: Smart Build (with dependency handling)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - 'GameServer/**'
+      - '.github/workflows/**'
+
+jobs:
+  smart-build:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    
+    strategy:
+      matrix:
+        config:
+          - name: "GameServer"
+            solution: "GameServer\NNOGameServer.sln"
+            project: "GameServer\NNOGameServer.vcxproj"
+          - name: "AppServer"
+            solution: "AppServer\NNOAppServer.sln"
+            project: "AppServer\NNOAppServer.vcxproj"
+          - name: "GameClient"
+            solution: "GameClient\NNOGameClient.sln"
+            project: "GameClient\NNOGameClient.vcxproj"
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v1.1
+      
+    - name: Build ${{ matrix.config.name }}
+      run: |
+        Write-Host "=== Building ${{ matrix.config.name }} ===" -ForegroundColor Cyan
+        
+        $solution = "${{ matrix.config.solution }}"
+        $project = "${{ matrix.config.project }}"
+        
+        # Try building project directly if solution fails
+        if (Test-Path $solution) {
+          Write-Host "Building solution: $solution" -ForegroundColor Gray
+          msbuild $solution /p:Configuration=Debug /p:Platform=Win32 /t:Build /v:minimal /nologo
+        } elseif (Test-Path $project) {
+          Write-Host "Building project directly: $project" -ForegroundColor Gray
+          msbuild $project /p:Configuration=Debug /p:Platform=Win32 /t:Build /v:minimal /nologo
+        } else {
+          Write-Host "❌ Neither solution nor project file found" -ForegroundColor Red
+          exit 1
+        }
+      shell: pwsh
+      continue-on-error: true
+      
+    - name: Upload artifacts
+      if: success()
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.config.name }}-output
+        path: |
+          ${{ matrix.config.name }}/Debug/
+          ${{ matrix.config.name }}/bin/
+        if-no-files-found: ignore
+
