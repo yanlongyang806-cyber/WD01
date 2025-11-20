@@ -46,6 +46,49 @@ jobs:
           ForEach-Object { Write-Host "  $($_.FullName)" -ForegroundColor Gray }
       shell: pwsh
       
+    - name: Setup PropertySheets
+      run: |
+        Write-Host "=== Setting up PropertySheets ===" -ForegroundColor Cyan
+        
+        # Project file expects PropertySheets at ..\..\PropertySheets\ relative to GameServer
+        # In GitHub Actions, we're at D:\a\WD01\WD01, so we need PropertySheets at D:\a\WD01\PropertySheets
+        $targetPropsDir = "..\PropertySheets"
+        
+        if (-not (Test-Path $targetPropsDir)) {
+            New-Item -ItemType Directory -Path $targetPropsDir -Force | Out-Null
+            Write-Host "Created PropertySheets directory at: $targetPropsDir" -ForegroundColor Green
+        }
+        
+        # Copy PropertySheets from repository if they exist
+        if (Test-Path "PropertySheets") {
+            Write-Host "Copying PropertySheets from repository..." -ForegroundColor Cyan
+            Copy-Item -Path "PropertySheets\*" -Destination $targetPropsDir -Recurse -Force
+            Write-Host "Copied PropertySheets to: $targetPropsDir" -ForegroundColor Green
+        } else {
+            # Create minimal PropertySheets if they don't exist in repo
+            Write-Host "Creating minimal PropertySheets..." -ForegroundColor Yellow
+            $propsFiles = @(
+                @{Path="$targetPropsDir\GeneralSettings.props"; Content='<?xml version="1.0" encoding="utf-8"?><Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003"><PropertyGroup><_PropertySheetDisplayName>General Settings</_PropertySheetDisplayName></PropertyGroup></Project>'},
+                @{Path="$targetPropsDir\CrypticApplication.props"; Content='<?xml version="1.0" encoding="utf-8"?><Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003"><PropertyGroup><_PropertySheetDisplayName>Cryptic Application</_PropertySheetDisplayName></PropertyGroup></Project>'},
+                @{Path="$targetPropsDir\LinkerOptimizations.props"; Content='<?xml version="1.0" encoding="utf-8"?><Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003"><PropertyGroup><_PropertySheetDisplayName>Linker Optimizations</_PropertySheetDisplayName></PropertyGroup></Project>'}
+            )
+            
+            foreach ($prop in $propsFiles) {
+                Set-Content -Path $prop.Path -Value $prop.Content -Encoding UTF8
+                Write-Host "Created: $($prop.Path)" -ForegroundColor Green
+            }
+        }
+        
+        # Verify PropertySheets are accessible from GameServer directory
+        $gameServerPropsPath = "GameServer\..\..\PropertySheets"
+        if (Test-Path $gameServerPropsPath) {
+            Write-Host "OK: PropertySheets accessible from GameServer directory" -ForegroundColor Green
+        } else {
+            Write-Host "WARNING: PropertySheets may not be accessible from GameServer" -ForegroundColor Yellow
+        }
+      shell: pwsh
+      continue-on-error: true
+      
     - name: Check dependencies
       id: check-deps
       run: |
